@@ -14,21 +14,21 @@ const config = {
   NEZHA_SERVER: process.env.NEZHA_SERVER || '',       // 哪吒面板地址，v1格式: nezha.xxx.com:8008  v0格式： nezha.xxx.com
   NEZHA_PORT: process.env.NEZHA_PORT || '',           // 哪吒v1请留空，哪吒v0 agent端口
   NEZHA_KEY: process.env.NEZHA_KEY || '',             // 哪吒v1的NZ_CLIENT_SECRET或哪吒v0-agent密钥
-  ARGO_DOMAIN: process.env.ARGO_DOMAIN || 'h2p2.111.dpdns.org',         // argo固定隧道域名,留空即启用临时隧道
-  ARGO_AUTH: process.env.ARGO_AUTH || 'eyJhIjoiZDhkZDM0M2RhNmFlNmU3ZWU5NTc4ZDU4NTEwOTYxZjAiLCJ0IjoiODY2MWRmMzYtYmRhMS00NDdiLTgxYjctNmJhMjE5MzE0NGUzIiwicyI6Ik9UTXpZekl6WkRVdE5tRTFPQzAwTnpoakxXRTFORGt0TlRabE0yVXpPR1JqTkdReSJ9',             // argo固定隧道token或json,留空即启用临时隧道,json获取:https://json.zone.id
-  ARGO_PORT: process.env.ARGO_PORT || '8052',         // argo隧道端口 使用固定隧道token,cloudflare后台设置的端口需和这里对应
+  ARGO_DOMAIN: process.env.ARGO_DOMAIN || '',         // argo固定隧道域名,留空即启用临时隧道
+  ARGO_AUTH: process.env.ARGO_AUTH || '',             // argo固定隧道token或json,留空即启用临时隧道,json获取:https://json.zone.id
+  ARGO_PORT: process.env.ARGO_PORT || '8001',         // argo隧道端口 使用固定隧道token,cloudflare后台设置的端口需和这里对应
   CFIP: process.env.CFIP || 'saas.sin.fan',           // 优选域名或优选ip
   CFPORT: process.env.CFPORT || '443',                // 优选域名或优选ip对应端口
-  NAME: process.env.NAME || 'host2play',                       // 节点备注
-  S5_PORT: process.env.S5_PORT || '5090',                 // socks5端口,支持多端口玩具可填写，否则不动
-  HY2_PORT: process.env.HY2_PORT || '5090',               // Hy2 端口，支持多端口玩具可填写，否则不动
+  NAME: process.env.NAME || 'host2play',                       // 节点备注，建议数字+字母，若使用到符号绝对不能用符号:'-'
+  S5_PORT: process.env.S5_PORT || '5086',                 // socks5端口,支持多端口玩具可填写，否则不动
+  HY2_PORT: process.env.HY2_PORT || '5086',               // Hy2 端口，支持多端口玩具可填写，否则不动
   TUIC_PORT: process.env.TUIC_PORT || '',             // Tuic 端口，支持多端口玩具可填写，否则不动 
   ANYTLS_PORT: process.env.ANYTLS_PORT || '',         // AnyTLS 端口,支持多端口玩具可填写，否则不动
   REALITY_PORT: process.env.REALITY_PORT || '',       // Reality 端口,支持多端口玩具可填写，否则不动  
   ANYREALITY_PORT: process.env.ANYREALITY_PORT || '', // Any Reality 端口,支持多端口玩具可填写，否则不动
-  CHAT_ID: process.env.CHAT_ID || '',                 // TG chat_id，可在https://t.me/laowang_serv00_bot 获取
-  BOT_TOKEN: process.env.BOT_TOKEN || '',             // TG bot_token, 使用自己的bot需要填写,使用上方的bot不用填写,不会给别人发送
-  UPLOAD_URL: process.env.UPLOAD_URL || '',           // 节点上传地址，需部署merge-sub订阅器项目，例如：https://merge.xxx.com
+  CHAT_ID: process.env.CHAT_ID || '8897141773',                 // TG chat_id，可在https://t.me/laowang_serv00_bot 获取
+  BOT_TOKEN: process.env.BOT_TOKEN || '8765860357:AAEfT_k12O__Tpc-Qw7ZYATCug8TEKjlROY',             // TG bot_token, 使用自己的bot需要填写,使用上方的bot不用填写,不会给别人发送
+  UPLOAD_URL: process.env.UPLOAD_URL || 'https://sub.2002.dpdns.org',           // 节点上传地址，需部署merge-sub订阅器项目，例如：https://merge.xxx.com
   FILE_PATH: process.env.FILE_PATH || '.npm',         // sub.txt节点存放目录
   DISABLE_ARGO: process.env.DISABLE_ARGO || 'false',  // 是否禁用argo, true为禁用,false为不禁用,默认开启
 };
@@ -177,13 +177,65 @@ async function main() {
       env: env,
       stdio: 'inherit'
     });
-
-    binaryProcess.on('error', (err) => {
-      log(`Process error: ${err.message}`, 'ERROR');
-    });
-
     binaryProcess.on('exit', (code) => {
       log(`Logs will be cleared in 90 seconds,you can copy the above nodes`);
+
+      try {
+        const subPath = path.join(config.FILE_PATH, 'sub.txt');
+        if (fs.existsSync(subPath)) {
+          const nodeContent = fs.readFileSync(subPath, 'utf8').trim();
+          if (nodeContent) {
+            log('正在由 index.js 亲自向 订阅器 推送节点...');
+
+            // 1. 尝试对 sub.txt 内容进行 Base64 解码
+            let decodedContent = nodeContent;
+            try {
+              if (!nodeContent.includes('://')) {
+                decodedContent = Buffer.from(nodeContent, 'base64').toString('utf-8');
+              }
+            } catch (e) {
+              decodedContent = nodeContent;
+            }
+
+            // 2. 按行切分，并只筛选出包含协议头 (://) 的明文标准节点
+            const lines = decodedContent
+              .split(/\r?\n/)
+              .map(s => s.trim())
+              .filter(s => s && s.includes('://'));
+
+            if (lines.length > 0) {
+              const postData = JSON.stringify({ nodes: lines });
+
+              const targetUrl = new URL(`${config.UPLOAD_URL}/add-nodes`);
+              const req = https.request(targetUrl, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Content-Length': Buffer.byteLength(postData)
+                }
+              }, (res) => {
+                let resData = '';
+                res.on('data', chunk => resData += chunk);
+                res.on('end', () => {
+                  log(`Workers 响应状态码: ${res.statusCode}, 响应内容: ${resData}`);
+                });
+              });
+
+              req.on('error', (e) => {
+                log(`index.js 推送失败，错误原因: ${e.message}`, 'ERROR');
+              });
+
+              req.write(postData);
+              req.end();
+            } else {
+              log('未在 sub.txt 中解析出包含 :// 的有效标准节点', 'WARN');
+            }
+          }
+        }
+      } catch (err) {
+        log(`读取 sub.txt 或推送时出错: ${err.message}`, 'ERROR');
+      }
+
       setTimeout(() => {
         if (fs.existsSync(binaryPath)) {
           fs.unlinkSync(binaryPath);
